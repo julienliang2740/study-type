@@ -1,0 +1,10 @@
+[[r2_buckets]]
+binding = "TYPE_STUDY_DOCUMENTS"
+bucket_name = "type-study-documents"
+preview_bucket_name = "type-study-documents-dev"
+
+
+VITE_PROCESS_INPUT_API_URL=https://type-study-process-input.julienliang2740.workers.dev
+
+VITE_NORMALIZATION_API_URL=https://type-study-normalization.julienliang2740.workers.dev
+

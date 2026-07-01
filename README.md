@@ -1,5 +1,8 @@
 # type-study-app
 
+Try it out:
+https://study-type.pages.dev/
+
 Local Monkeytype-style typing app with separate process-input and normalization backends.
 
 ## Local MVP Flow
