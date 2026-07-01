@@ -19,10 +19,22 @@ function writeJson(
 ): void {
   const payload = JSON.stringify(body, null, 2);
   response.writeHead(statusCode, {
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(payload, "utf8")
   });
   response.end(payload);
+}
+
+function writeEmpty(response: ServerResponse, statusCode: number): void {
+  response.writeHead(statusCode, {
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*"
+  });
+  response.end();
 }
 
 function writeError(
@@ -93,6 +105,11 @@ export async function handleRequest(
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
   try {
+    if (request.method === "OPTIONS") {
+      writeEmpty(response, 204);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       writeJson(response, 200, {
         ok: true,

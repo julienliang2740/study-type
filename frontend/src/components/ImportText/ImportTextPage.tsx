@@ -6,6 +6,10 @@ import {
   type NormalizationOptions,
   type NormalizedTypingText
 } from "../../services/normalizationClient";
+import {
+  processImportFile,
+  type ProcessedInputDocument
+} from "../../services/processInputClient";
 import type { Passage } from "../../types/passage";
 import { NormalizationOptionsPanel } from "./NormalizationOptionsPanel";
 
@@ -15,11 +19,17 @@ type ImportTextPageProps = {
 
 const sampleText = "The empire, however, expanded in 476.";
 
-function buildImportedPassage(normalizedText: NormalizedTypingText): Passage {
+function buildImportedPassage(
+  normalizedText: NormalizedTypingText,
+  processedDocument: ProcessedInputDocument | null
+): Passage {
   return {
-    id: `import-${Date.now()}`,
-    title: "Imported text",
-    source: "Local import",
+    id: processedDocument?.id ?? `import-${Date.now()}`,
+    title: processedDocument?.title ?? "Imported text",
+    source:
+      processedDocument === null
+        ? "Local import"
+        : `${processedDocument.sourceType.toUpperCase()} import`,
     text: normalizedText.inputText,
     normalizedText
   };
@@ -61,6 +71,11 @@ export function ImportTextPage({
   const [normalizationError, setNormalizationError] = useState<string | null>(
     null
   );
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [processedDocument, setProcessedDocument] =
+    useState<ProcessedInputDocument | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [fileImportError, setFileImportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +103,25 @@ export function ImportTextPage({
 
   const canStart = normalizedText.inputText.trim().length > 0;
 
+  const processSelectedFile = async (): Promise<void> => {
+    if (selectedFile === null) return;
+
+    setIsProcessingFile(true);
+    setFileImportError(null);
+    try {
+      const document = await processImportFile(selectedFile);
+      setProcessedDocument(document);
+      setRawText(document.canonicalText);
+    } catch (error) {
+      setProcessedDocument(null);
+      setFileImportError(
+        error instanceof Error ? error.message : "File processing failed"
+      );
+    } finally {
+      setIsProcessingFile(false);
+    }
+  };
+
   return (
     <section className="import-page full-width-padding">
       <div className="import-layout">
@@ -101,14 +135,54 @@ export function ImportTextPage({
             placeholder={sampleText}
             value={rawText}
             onChange={(event) => {
+              setProcessedDocument(null);
+              setFileImportError(null);
               setRawText(event.currentTarget.value);
             }}
           />
+          <div className="file-import">
+            <label className="field-label" htmlFor="fileImportInput">
+              upload txt/pdf
+            </label>
+            <div className="file-import-row">
+              <input
+                id="fileImportInput"
+                type="file"
+                accept=".txt,.pdf,text/plain,application/pdf"
+                onChange={(event) => {
+                  setSelectedFile(event.currentTarget.files?.[0] ?? null);
+                  setFileImportError(null);
+                }}
+              />
+              <button
+                type="button"
+                className="button"
+                disabled={selectedFile === null || isProcessingFile}
+                onClick={() => {
+                  void processSelectedFile();
+                }}
+              >
+                {isProcessingFile ? "processing" : "process file"}
+              </button>
+            </div>
+            <div className="file-import-meta">
+              {processedDocument !== null
+                ? `${processedDocument.title} · ${processedDocument.sourceType} · ${processedDocument.metadata.wordCount} words`
+                : selectedFile === null
+                  ? "select a .txt or text-based .pdf file"
+                  : `${selectedFile.name} ready to process`}
+            </div>
+            {fileImportError !== null ? (
+              <div className="import-error">{fileImportError}</div>
+            ) : null}
+          </div>
           <div className="import-actions">
             <button
               type="button"
               className="button"
               onClick={() => {
+                setProcessedDocument(null);
+                setFileImportError(null);
                 setRawText(sampleText);
                 setOptions({
                   ...defaultNormalizationOptions,
@@ -124,7 +198,9 @@ export function ImportTextPage({
               disabled={!canStart}
               onClick={() => {
                 if (!canStart) return;
-                onStartTyping(buildImportedPassage(normalizedText));
+                onStartTyping(
+                  buildImportedPassage(normalizedText, processedDocument)
+                );
               }}
             >
               start typing
