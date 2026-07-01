@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import {
   defaultNormalizationOptions,
   emptyNormalizedTypingText,
-  normalizeImportedText,
+  normalizeDocument,
   type NormalizationOptions,
   type NormalizedTypingText
 } from "../../services/normalizationClient";
 import {
+  MAX_UPLOAD_BYTES,
   processImportFile,
-  type ProcessedInputDocument
+  processPastedText,
+  type ProcessedDocumentSummary
 } from "../../services/processInputClient";
 import type { Passage } from "../../types/passage";
 import { NormalizationOptionsPanel } from "./NormalizationOptionsPanel";
@@ -19,31 +21,32 @@ type ImportTextPageProps = {
 
 const sampleText = "The empire, however, expanded in 476.";
 
+type RequestStatus = "idle" | "loading" | "success" | "error";
+
 function buildImportedPassage(
   normalizedText: NormalizedTypingText,
-  processedDocument: ProcessedInputDocument | null
+  processedDocument: ProcessedDocumentSummary
 ): Passage {
   return {
-    id: processedDocument?.id ?? `import-${Date.now()}`,
-    title: processedDocument?.title ?? "Imported text",
-    source:
-      processedDocument === null
-        ? "Local import"
-        : `${processedDocument.sourceType.toUpperCase()} import`,
+    id: processedDocument.documentId,
+    title: processedDocument.title,
+    source: `${processedDocument.sourceType.toUpperCase()} import`,
     text: normalizedText.inputText,
     normalizedText
   };
 }
 
 function FaintDisplayPreview({
-  normalizedText
+  normalizedText,
+  placeholder
 }: {
   normalizedText: NormalizedTypingText;
+  placeholder: string;
 }): React.JSX.Element {
   return (
     <div className="preview-text">
       {normalizedText.characterMap.length === 0 ? (
-        <span className="muted">nothing to preview</span>
+        <span className="muted">{placeholder}</span>
       ) : (
         normalizedText.characterMap.map((entry, index) => (
           <span
@@ -58,6 +61,10 @@ function FaintDisplayPreview({
   );
 }
 
+function formatUploadLimit(): string {
+  return `${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MiB`;
+}
+
 export function ImportTextPage({
   onStartTyping
 }: ImportTextPageProps): React.JSX.Element {
@@ -68,28 +75,44 @@ export function ImportTextPage({
   const [normalizedText, setNormalizedText] = useState<NormalizedTypingText>(
     emptyNormalizedTypingText
   );
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileInputVersion, setFileInputVersion] = useState(0);
+  const [processedDocument, setProcessedDocument] =
+    useState<ProcessedDocumentSummary | null>(null);
+  const [processStatus, setProcessStatus] = useState<RequestStatus>("idle");
+  const [normalizeStatus, setNormalizeStatus] =
+    useState<RequestStatus>("idle");
+  const [processError, setProcessError] = useState<string | null>(null);
   const [normalizationError, setNormalizationError] = useState<string | null>(
     null
   );
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [processedDocument, setProcessedDocument] =
-    useState<ProcessedInputDocument | null>(null);
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [fileImportError, setFileImportError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (processedDocument === null) {
+      setNormalizedText(emptyNormalizedTypingText);
+      setNormalizeStatus("idle");
+      setNormalizationError(null);
+      return;
+    }
 
-    void normalizeImportedText({ rawText, options })
+    let cancelled = false;
+    setNormalizeStatus("loading");
+    setNormalizationError(null);
+
+    void normalizeDocument({
+      documentId: processedDocument.documentId,
+      options
+    })
       .then((nextText) => {
         if (!cancelled) {
           setNormalizedText(nextText);
-          setNormalizationError(null);
+          setNormalizeStatus("success");
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
           setNormalizedText(emptyNormalizedTypingText);
+          setNormalizeStatus("error");
           setNormalizationError(
             error instanceof Error ? error.message : "Normalization failed"
           );
@@ -99,28 +122,64 @@ export function ImportTextPage({
     return () => {
       cancelled = true;
     };
-  }, [options, rawText]);
+  }, [options, processedDocument]);
 
-  const canStart = normalizedText.inputText.trim().length > 0;
+  const resetProcessedState = (): void => {
+    setProcessedDocument(null);
+    setNormalizedText(emptyNormalizedTypingText);
+    setProcessStatus("idle");
+    setNormalizeStatus("idle");
+    setProcessError(null);
+    setNormalizationError(null);
+  };
 
-  const processSelectedFile = async (): Promise<void> => {
-    if (selectedFile === null) return;
+  const processImport = async (): Promise<void> => {
+    const pastedText = rawText;
+    if (selectedFile === null && pastedText.trim().length === 0) return;
 
-    setIsProcessingFile(true);
-    setFileImportError(null);
+    setProcessStatus("loading");
+    setProcessError(null);
+    setNormalizationError(null);
+    setNormalizedText(emptyNormalizedTypingText);
+
     try {
-      const document = await processImportFile(selectedFile);
+      const document =
+        selectedFile === null
+          ? await processPastedText({
+              title: "Imported paste",
+              text: pastedText
+            })
+          : await processImportFile(selectedFile);
       setProcessedDocument(document);
-      setRawText(document.canonicalText);
+      setProcessStatus("success");
     } catch (error) {
       setProcessedDocument(null);
-      setFileImportError(
-        error instanceof Error ? error.message : "File processing failed"
+      setProcessStatus("error");
+      setProcessError(
+        error instanceof Error ? error.message : "Document processing failed"
       );
-    } finally {
-      setIsProcessingFile(false);
     }
   };
+
+  const canProcess =
+    processStatus !== "loading" &&
+    (selectedFile !== null || rawText.trim().length > 0);
+  const canStart =
+    processedDocument !== null &&
+    normalizeStatus === "success" &&
+    normalizedText.inputText.trim().length > 0;
+  const previewPlaceholder =
+    processedDocument === null
+      ? "process a document first"
+      : normalizeStatus === "loading"
+        ? "normalizing..."
+        : "nothing to preview";
+  const requiredInputPlaceholder =
+    processedDocument === null
+      ? "process a document first"
+      : normalizeStatus === "loading"
+        ? "normalizing..."
+        : "nothing to type";
 
   return (
     <section className="import-page full-width-padding">
@@ -135,8 +194,9 @@ export function ImportTextPage({
             placeholder={sampleText}
             value={rawText}
             onChange={(event) => {
-              setProcessedDocument(null);
-              setFileImportError(null);
+              setSelectedFile(null);
+              setFileInputVersion((current) => current + 1);
+              resetProcessedState();
               setRawText(event.currentTarget.value);
             }}
           />
@@ -146,43 +206,44 @@ export function ImportTextPage({
             </label>
             <div className="file-import-row">
               <input
+                key={fileInputVersion}
                 id="fileImportInput"
                 type="file"
                 accept=".txt,.pdf,text/plain,application/pdf"
                 onChange={(event) => {
+                  resetProcessedState();
                   setSelectedFile(event.currentTarget.files?.[0] ?? null);
-                  setFileImportError(null);
                 }}
               />
               <button
                 type="button"
                 className="button"
-                disabled={selectedFile === null || isProcessingFile}
+                disabled={selectedFile === null}
                 onClick={() => {
-                  void processSelectedFile();
+                  setSelectedFile(null);
+                  setFileInputVersion((current) => current + 1);
+                  resetProcessedState();
                 }}
               >
-                {isProcessingFile ? "processing" : "process file"}
+                clear file
               </button>
             </div>
             <div className="file-import-meta">
               {processedDocument !== null
-                ? `${processedDocument.title} · ${processedDocument.sourceType} · ${processedDocument.metadata.wordCount} words`
+                ? `${processedDocument.title} / ${processedDocument.sourceType} / ${processedDocument.metadata.wordCount} words`
                 : selectedFile === null
-                  ? "select a .txt or text-based .pdf file"
+                  ? `select a .txt or text-based .pdf file, max ${formatUploadLimit()}`
                   : `${selectedFile.name} ready to process`}
             </div>
-            {fileImportError !== null ? (
-              <div className="import-error">{fileImportError}</div>
-            ) : null}
           </div>
           <div className="import-actions">
             <button
               type="button"
               className="button"
               onClick={() => {
-                setProcessedDocument(null);
-                setFileImportError(null);
+                setSelectedFile(null);
+                setFileInputVersion((current) => current + 1);
+                resetProcessedState();
                 setRawText(sampleText);
                 setOptions({
                   ...defaultNormalizationOptions,
@@ -194,10 +255,20 @@ export function ImportTextPage({
             </button>
             <button
               type="button"
+              className="button"
+              disabled={!canProcess}
+              onClick={() => {
+                void processImport();
+              }}
+            >
+              {processStatus === "loading" ? "processing" : "process/import"}
+            </button>
+            <button
+              type="button"
               className="button main"
               disabled={!canStart}
               onClick={() => {
-                if (!canStart) return;
+                if (!canStart || processedDocument === null) return;
                 onStartTyping(
                   buildImportedPassage(normalizedText, processedDocument)
                 );
@@ -206,6 +277,14 @@ export function ImportTextPage({
               start typing
             </button>
           </div>
+          {processedDocument !== null ? (
+            <div className="processed-document-meta">
+              processed {processedDocument.documentId}
+            </div>
+          ) : null}
+          {processError !== null ? (
+            <div className="import-error">{processError}</div>
+          ) : null}
           {normalizationError !== null ? (
             <div className="import-error">{normalizationError}</div>
           ) : null}
@@ -216,13 +295,16 @@ export function ImportTextPage({
         <div className="normalization-preview">
           <div className="preview-group">
             <div className="preview-label">display</div>
-            <FaintDisplayPreview normalizedText={normalizedText} />
+            <FaintDisplayPreview
+              normalizedText={normalizedText}
+              placeholder={previewPlaceholder}
+            />
           </div>
           <div className="preview-group">
             <div className="preview-label">required input</div>
             <div className="preview-text required">
               {normalizedText.inputText || (
-                <span className="muted">nothing to type</span>
+                <span className="muted">{requiredInputPlaceholder}</span>
               )}
             </div>
           </div>

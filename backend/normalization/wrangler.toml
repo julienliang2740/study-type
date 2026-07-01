@@ -1,0 +1,8 @@
+name = "type-study-normalization"
+main = "worker.ts"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "TYPE_STUDY_DOCUMENTS"
+bucket_name = "type-study-documents"
+preview_bucket_name = "type-study-documents-dev"

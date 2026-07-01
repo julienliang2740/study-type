@@ -1,6 +1,7 @@
 export const PROCESS_INPUT_VERSION = "process_input.v1" as const;
-export const MAX_TEXT_BYTES = 10 * 1024 * 1024;
-export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_TEXT_BYTES = MAX_UPLOAD_BYTES;
+export const MAX_PDF_BYTES = MAX_UPLOAD_BYTES;
 
 export type ProcessedInputVersion = typeof PROCESS_INPUT_VERSION;
 export type ProcessedInputSourceType = "paste" | "txt" | "pdf";
@@ -69,6 +70,23 @@ export type ProcessInputErrorCode =
   | "payload_too_large"
   | "not_found"
   | "method_not_allowed";
+
+export type StoredDocumentStatus = "processed";
+
+export type StoredDocumentKeys = {
+  originalKey: string;
+  processedKey: string;
+};
+
+export type StoredProcessedInputResponse = {
+  documentId: string;
+  status: StoredDocumentStatus;
+  title: string;
+  sourceType: ProcessedInputSourceType;
+  source: ProcessedInputSource;
+  metadata: ProcessedInputDocument["metadata"];
+  storage: StoredDocumentKeys;
+};
 
 export type ProcessInputErrorResponse = {
   error: {

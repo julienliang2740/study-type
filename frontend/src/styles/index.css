@@ -514,6 +514,13 @@ button:focus-visible {
   line-height: 1.35;
 }
 
+.processed-document-meta {
+  color: var(--sub-color);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .import-actions {
   display: flex;
   flex-wrap: wrap;

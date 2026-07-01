@@ -1,16 +1,35 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { processPdfInput } from "./processPdf.js";
+import {
+  processPdfAndStore,
+  processTextAndStore,
+  processTxtAndStore
+} from "./processAndStore.js";
 import { processTextInput } from "./processText.js";
 import { processTxtInput } from "./processTxt.js";
 import {
+  createStoredDocumentResponse,
+  getDocumentStorageKeys,
+  memoryProcessInputStorage
+} from "./storage.js";
+import {
   MAX_PDF_BYTES,
-  MAX_TEXT_BYTES,
   ProcessInputError,
   PROCESS_INPUT_VERSION
 } from "./types.js";
 import type { ProcessInputErrorResponse } from "./types.js";
 
 const MAX_JSON_BODY_BYTES = Math.ceil((MAX_PDF_BYTES * 4) / 3) + 64 * 1024;
+const apiProcessPaths = new Set([
+  "/api/process/text",
+  "/api/process/txt",
+  "/api/process/pdf"
+]);
+const legacyProcessPaths = new Set([
+  "/process/text",
+  "/process/txt",
+  "/process/pdf"
+]);
 
 function writeJson(
   response: ServerResponse,
@@ -98,6 +117,27 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
+function getDocumentIdFromProcessedPath(pathname: string): string | null {
+  const match = /^\/api\/documents\/([^/]+)\/processed$/.exec(pathname);
+  return match?.[1] === undefined ? null : decodeURIComponent(match[1]);
+}
+
+function getDocumentIdFromDocumentPath(pathname: string): string | null {
+  const match = /^\/api\/documents\/([^/]+)$/.exec(pathname);
+  return match?.[1] === undefined ? null : decodeURIComponent(match[1]);
+}
+
+function isKnownPath(pathname: string): boolean {
+  return (
+    pathname === "/health" ||
+    pathname === "/api/health" ||
+    legacyProcessPaths.has(pathname) ||
+    apiProcessPaths.has(pathname) ||
+    getDocumentIdFromDocumentPath(pathname) !== null ||
+    getDocumentIdFromProcessedPath(pathname) !== null
+  );
+}
+
 export async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse
@@ -110,12 +150,75 @@ export async function handleRequest(
       return;
     }
 
-    if (request.method === "GET" && url.pathname === "/health") {
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/health" || url.pathname === "/api/health")
+    ) {
       writeJson(response, 200, {
         ok: true,
         service: "process_input",
         version: PROCESS_INPUT_VERSION
       });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/process/text") {
+      const body = await readJsonBody(request);
+      writeJson(
+        response,
+        200,
+        await processTextAndStore(body, memoryProcessInputStorage)
+      );
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/process/txt") {
+      const body = await readJsonBody(request);
+      writeJson(
+        response,
+        200,
+        await processTxtAndStore(body, memoryProcessInputStorage)
+      );
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/process/pdf") {
+      const body = await readJsonBody(request);
+      writeJson(
+        response,
+        200,
+        await processPdfAndStore(body, memoryProcessInputStorage)
+      );
+      return;
+    }
+
+    const processedDocumentId = getDocumentIdFromProcessedPath(url.pathname);
+    if (request.method === "GET" && processedDocumentId !== null) {
+      const document =
+        await memoryProcessInputStorage.getProcessedDocument(processedDocumentId);
+      if (document === null) {
+        throw new ProcessInputError(404, "not_found", "document not found");
+      }
+      writeJson(response, 200, document);
+      return;
+    }
+
+    const documentId = getDocumentIdFromDocumentPath(url.pathname);
+    if (request.method === "GET" && documentId !== null) {
+      const document = await memoryProcessInputStorage.getProcessedDocument(
+        documentId
+      );
+      if (document === null) {
+        throw new ProcessInputError(404, "not_found", "document not found");
+      }
+      writeJson(
+        response,
+        200,
+        createStoredDocumentResponse({
+          document,
+          storage: getDocumentStorageKeys(document.id, document.sourceType)
+        })
+      );
       return;
     }
 
@@ -137,12 +240,7 @@ export async function handleRequest(
       return;
     }
 
-    if (
-      url.pathname === "/process/text" ||
-      url.pathname === "/process/txt" ||
-      url.pathname === "/process/pdf" ||
-      url.pathname === "/health"
-    ) {
+    if (isKnownPath(url.pathname)) {
       throw new ProcessInputError(
         405,
         "method_not_allowed",

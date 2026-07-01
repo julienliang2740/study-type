@@ -49,7 +49,7 @@ export function assertProcessableText(text: unknown): asserts text is string {
     throw new ProcessInputError(
       413,
       "payload_too_large",
-      "text exceeds the 10 MiB local processing limit"
+      "text exceeds the 10 MiB processing limit"
     );
   }
 }

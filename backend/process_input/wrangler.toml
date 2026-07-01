@@ -1,0 +1,9 @@
+name = "type-study-process-input"
+main = "src/worker.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "TYPE_STUDY_DOCUMENTS"
+bucket_name = "type-study-documents"
+preview_bucket_name = "type-study-documents-dev"

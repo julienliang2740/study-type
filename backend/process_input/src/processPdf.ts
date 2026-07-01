@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { getDocument, VerbosityLevel } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { cleanPdfExtractedText } from "./cleanPdfText.js";
 import { buildProcessedDocument } from "./processText.js";
 import {
@@ -12,6 +11,58 @@ import type {
   PdfTextItemLike
 } from "./pdfTypes.js";
 import type { ProcessedInputDocument } from "./types.js";
+
+type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
+type PdfWorkerModule = typeof import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+
+type DomMatrixGlobal = {
+  DOMMatrix?: typeof MinimalDOMMatrix;
+  pdfjsWorker?: PdfWorkerModule;
+};
+
+class MinimalDOMMatrix {
+  a = 1;
+  b = 0;
+  c = 0;
+  d = 1;
+  e = 0;
+  f = 0;
+
+  constructor(init?: number[] | string) {
+    if (Array.isArray(init)) {
+      this.a = init[0] ?? 1;
+      this.b = init[1] ?? 0;
+      this.c = init[2] ?? 0;
+      this.d = init[3] ?? 1;
+      this.e = init[4] ?? 0;
+      this.f = init[5] ?? 0;
+    }
+  }
+
+  multiplySelf(): this {
+    return this;
+  }
+
+  preMultiplySelf(): this {
+    return this;
+  }
+
+  translateSelf(): this {
+    return this;
+  }
+
+  scaleSelf(): this {
+    return this;
+  }
+
+  rotateSelf(): this {
+    return this;
+  }
+
+  invertSelf(): this {
+    return this;
+  }
+}
 
 const allowedPdfMimeTypes = new Set([
   "application/pdf",
@@ -58,7 +109,7 @@ function assertSupportedPdfMimeType(
   }
 }
 
-function decodePdfBase64(dataBase64: unknown): Buffer {
+export function decodePdfBase64(dataBase64: unknown): Buffer {
   if (typeof dataBase64 !== "string" || dataBase64.trim().length === 0) {
     throw new ProcessInputError(
       400,
@@ -88,7 +139,7 @@ function decodePdfBase64(dataBase64: unknown): Buffer {
     throw new ProcessInputError(
       413,
       "payload_too_large",
-      "PDF exceeds the 25 MiB local processing limit"
+      "PDF exceeds the 10 MiB processing limit"
     );
   }
 
@@ -117,6 +168,7 @@ function pageItemsToText(items: unknown[]): string {
 
 async function extractPdfText(pdfBytes: Buffer): Promise<PdfExtractedText> {
   try {
+    const { getDocument, VerbosityLevel } = await loadPdfJs();
     const loadingTask = getDocument({
       data: new Uint8Array(pdfBytes),
       disableFontFace: true,
@@ -157,6 +209,19 @@ async function extractPdfText(pdfBytes: Buffer): Promise<PdfExtractedText> {
         : "PDF text extraction failed"
     );
   }
+}
+
+async function loadPdfJs(): Promise<PdfJsModule> {
+  const domGlobal = globalThis as unknown as DomMatrixGlobal;
+  if (domGlobal.DOMMatrix === undefined) {
+    domGlobal.DOMMatrix = MinimalDOMMatrix;
+  }
+  const [pdfJs, pdfWorker] = await Promise.all([
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("pdfjs-dist/legacy/build/pdf.worker.mjs")
+  ]);
+  domGlobal.pdfjsWorker ??= pdfWorker;
+  return pdfJs;
 }
 
 export async function processPdfInput(

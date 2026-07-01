@@ -8,6 +8,8 @@ export type {
   NormalizedTypingText
 } from "./types";
 export type {
+  NormalizeDocumentRequest,
+  NormalizeDocumentResponse,
   NormalizeTextRequest,
   NormalizeTextResponse
 } from "./service";

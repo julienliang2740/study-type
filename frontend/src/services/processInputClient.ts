@@ -1,3 +1,5 @@
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 type ProcessedInputSourceType = "paste" | "txt" | "pdf";
 
 export type ProcessedTextBlock = {
@@ -30,6 +32,19 @@ export type ProcessedInputDocument = {
   };
 };
 
+export type ProcessedDocumentSummary = {
+  documentId: string;
+  status: "processed";
+  title: string;
+  sourceType: ProcessedInputSourceType;
+  source: ProcessedInputDocument["source"];
+  metadata: ProcessedInputDocument["metadata"];
+  storage: {
+    originalKey: string;
+    processedKey: string;
+  };
+};
+
 type ProcessInputErrorResponse = {
   error?: {
     code?: string;
@@ -45,6 +60,16 @@ function getFileExtension(fileName: string): string {
   return index >= 0 ? fileName.slice(index).toLowerCase() : "";
 }
 
+function formatUploadLimit(): string {
+  return `${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MiB`;
+}
+
+function assertFileSize(file: File): void {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`File uploads are limited to ${formatUploadLimit()}.`);
+  }
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
@@ -58,10 +83,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary);
 }
 
-async function postProcessedInput(
-  path: "/process/txt" | "/process/pdf",
+async function postJson<TResponse>(
+  path: string,
   body: object
-): Promise<ProcessedInputDocument> {
+): Promise<TResponse> {
   let response: Response;
   try {
     response = await fetch(`${processInputApiUrl}${path}`, {
@@ -73,7 +98,7 @@ async function postProcessedInput(
     });
   } catch {
     throw new Error(
-      `Could not reach process_input at ${processInputApiUrl}. Start backend/process_input with npm run dev.`
+      `Could not reach process_input at ${processInputApiUrl}. Start backend/process_input with npm run dev:worker.`
     );
   }
 
@@ -87,16 +112,53 @@ async function postProcessedInput(
     );
   }
 
-  return (await response.json()) as ProcessedInputDocument;
+  return (await response.json()) as TResponse;
+}
+
+async function getJson<TResponse>(path: string): Promise<TResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${processInputApiUrl}${path}`);
+  } catch {
+    throw new Error(
+      `Could not reach process_input at ${processInputApiUrl}. Start backend/process_input with npm run dev:worker.`
+    );
+  }
+
+  if (!response.ok) {
+    const errorBody = (await response
+      .json()
+      .catch(() => ({}))) as ProcessInputErrorResponse;
+    throw new Error(
+      errorBody.error?.message ??
+        `process_input failed with status ${response.status}`
+    );
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+export async function processPastedText({
+  title,
+  text
+}: {
+  title?: string;
+  text: string;
+}): Promise<ProcessedDocumentSummary> {
+  return postJson<ProcessedDocumentSummary>("/api/process/text", {
+    title,
+    text
+  });
 }
 
 export async function processImportFile(
   file: File
-): Promise<ProcessedInputDocument> {
+): Promise<ProcessedDocumentSummary> {
+  assertFileSize(file);
   const extension = getFileExtension(file.name);
 
   if (extension === ".txt" || file.type === "text/plain") {
-    return postProcessedInput("/process/txt", {
+    return postJson<ProcessedDocumentSummary>("/api/process/txt", {
       title: file.name,
       fileName: file.name,
       mimeType: file.type || "text/plain",
@@ -105,7 +167,7 @@ export async function processImportFile(
   }
 
   if (extension === ".pdf" || file.type === "application/pdf") {
-    return postProcessedInput("/process/pdf", {
+    return postJson<ProcessedDocumentSummary>("/api/process/pdf", {
       title: file.name,
       fileName: file.name,
       mimeType: file.type || "application/pdf",
@@ -114,4 +176,12 @@ export async function processImportFile(
   }
 
   throw new Error("Choose a .txt or text-based .pdf file.");
+}
+
+export async function getProcessedDocument(
+  documentId: string
+): Promise<ProcessedInputDocument> {
+  return getJson<ProcessedInputDocument>(
+    `/api/documents/${encodeURIComponent(documentId)}/processed`
+  );
 }
