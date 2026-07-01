@@ -1,10 +1,24 @@
 export type CommitChar = " " | "\n" | "";
 
+export type TypingDisplayToken =
+  | {
+      kind: "required";
+      char: string;
+      inputOffset: number;
+    }
+  | {
+      kind: "faint";
+      char: string;
+    };
+
 export type TypingWord = {
   text: string;
   textWithCommit: string;
   commit: CommitChar;
   display: string;
+  displayTokens: TypingDisplayToken[];
+  inputStart: number;
+  inputEnd: number;
   sectionIndex: number;
 };
 

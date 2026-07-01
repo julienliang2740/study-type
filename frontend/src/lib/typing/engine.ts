@@ -3,7 +3,8 @@ import type { TypingInputEvent, TypingState } from "../../types/typing";
 import { createTypingWords, isSpace } from "./words";
 
 export function createInitialTypingState(passage: Passage): TypingState {
-  const words = createTypingWords(passage.text);
+  const typingText = passage.normalizedText?.inputText ?? passage.text;
+  const words = createTypingWords(typingText, passage.normalizedText);
 
   return {
     words,

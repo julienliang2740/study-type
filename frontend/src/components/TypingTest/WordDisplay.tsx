@@ -24,7 +24,10 @@ function getWordHasError(input: string, target: string): boolean {
   return false;
 }
 
-function getLetterClass(inputChar: string | undefined, targetChar: string | undefined): string {
+function getLetterClass(
+  inputChar: string | undefined,
+  targetChar: string | undefined
+): string {
   if (inputChar === undefined) return "";
   if (targetChar === undefined) return "incorrect extra";
   return inputChar === targetChar ? "correct" : "incorrect";
@@ -64,7 +67,7 @@ export function WordDisplay({
         const hasError =
           getWordHasError(input, word.text) ||
           (isTyped && input !== "" && input !== word.text);
-        const charCount = Math.max(word.text.length, input.length);
+        const extraInput = input.slice(word.text.length);
 
         return (
           <div
@@ -82,7 +85,19 @@ export function WordDisplay({
               registerWord(wordIndex, element);
             }}
           >
-            {Array.from({ length: charCount }, (_, charIndex) => {
+            {word.displayTokens.map((token, tokenIndex) => {
+              if (token.kind === "faint") {
+                return (
+                  <span
+                    className="letter faint"
+                    key={`faint-${tokenIndex}`}
+                  >
+                    {token.char}
+                  </span>
+                );
+              }
+
+              const charIndex = token.inputOffset;
               const inputChar = input[charIndex];
               const targetChar = word.text[charIndex];
               const className = getLetterClass(inputChar, targetChar);
@@ -94,12 +109,28 @@ export function WordDisplay({
               return (
                 <span
                   className={["letter", className].filter(Boolean).join(" ")}
-                  key={charIndex}
+                  key={`required-${charIndex}`}
                   ref={(element) => {
                     registerLetter(wordIndex, charIndex, element);
                   }}
                 >
                   {visibleCharacter}
+                </span>
+              );
+            })}
+
+            {Array.from(extraInput, (inputChar, extraIndex) => {
+              const charIndex = word.text.length + extraIndex;
+
+              return (
+                <span
+                  className="letter incorrect extra"
+                  key={`extra-${charIndex}`}
+                  ref={(element) => {
+                    registerLetter(wordIndex, charIndex, element);
+                  }}
+                >
+                  {inputChar === " " ? "_" : inputChar}
                 </span>
               );
             })}

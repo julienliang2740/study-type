@@ -46,6 +46,11 @@ button {
     opacity 0.125s;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 button:hover,
 button:focus-visible {
   color: var(--text-color);
@@ -126,6 +131,21 @@ button:focus-visible {
 
 .test-meta {
   font-size: 0.95rem;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.topbar-actions button {
+  padding: 0.35rem 0.55rem;
+  color: var(--sub-color);
+}
+
+.topbar-actions button.active {
+  color: var(--main-color);
 }
 
 .pageTest {
@@ -238,6 +258,11 @@ button:focus-visible {
 
 .letter.incorrect.extra {
   color: var(--extra-letter-color);
+}
+
+.letter.faint {
+  color: var(--sub-color);
+  opacity: 0.45;
 }
 
 .word.error {
@@ -375,6 +400,140 @@ button:focus-visible {
   justify-content: center;
 }
 
+.import-page {
+  min-height: calc(100vh - 8rem);
+  display: grid;
+  align-content: center;
+}
+
+.import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+  gap: 1rem;
+  width: min(100%, 72rem);
+  margin: 0 auto;
+}
+
+.import-editor,
+.normalization-options,
+.normalization-preview {
+  min-width: 0;
+  padding: 1rem;
+  background: var(--sub-alt-color);
+  border-radius: var(--roundness);
+}
+
+.import-editor {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.field-label,
+.normalization-options legend,
+.preview-label {
+  color: var(--main-color);
+  font-size: 0.9rem;
+  line-height: 1rem;
+}
+
+.raw-text-input {
+  width: 100%;
+  min-height: 16rem;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--text-color);
+  line-height: 1.55;
+}
+
+.raw-text-input::placeholder {
+  color: var(--sub-color);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.import-error {
+  color: var(--error-color);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.button {
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-color);
+}
+
+.button.main {
+  color: var(--bg-color);
+  background: var(--main-color);
+}
+
+.normalization-options {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  margin: 0;
+  border: 0;
+}
+
+.checkbox-option {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  line-height: 1.25rem;
+}
+
+.checkbox-option input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.12rem 0 0;
+  accent-color: var(--main-color);
+}
+
+.normalization-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.preview-group {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.preview-text {
+  min-height: 5rem;
+  color: var(--text-color);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-text.required {
+  color: var(--sub-color);
+}
+
+.faint-preview-char {
+  color: var(--sub-color);
+  opacity: 0.45;
+}
+
+.muted {
+  color: var(--sub-color);
+}
+
 @keyframes caretFlashSmooth {
   0%,
   100% {
@@ -412,5 +571,10 @@ button:focus-visible {
   #result .group.acc .bottom {
     font-size: 3rem;
     line-height: 3rem;
+  }
+
+  .import-layout,
+  .normalization-preview {
+    grid-template-columns: 1fr;
   }
 }
