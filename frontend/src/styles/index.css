@@ -179,7 +179,7 @@ button:focus-visible {
 
 #wordsWrapper {
   position: relative;
-  overflow: hidden;
+  overflow: visible clip;
   height: 9rem;
   cursor: text;
   scroll-behavior: auto;
@@ -200,10 +200,14 @@ button:focus-visible {
   pointer-events: none;
   overflow: hidden;
   white-space: pre;
+  text-wrap-mode: nowrap;
+  contain: strict;
 }
 
 #caret {
   position: absolute;
+  left: 0;
+  top: 0;
   z-index: 2;
   width: 0.1em;
   min-height: 1.2em;
@@ -211,8 +215,8 @@ button:focus-visible {
   border-radius: var(--roundness);
   transform-origin: top left;
   animation: caretFlashSmooth 1s infinite;
-  transition: transform 0.05s ease;
   pointer-events: none;
+  will-change: left, top, height;
 }
 
 #words {
@@ -230,7 +234,6 @@ button:focus-visible {
   font-size: 2rem;
   line-height: 1em;
   user-select: none;
-  transition: transform 0.125s ease;
   will-change: transform;
 }
 
@@ -240,6 +243,24 @@ button:focus-visible {
   border-bottom: 2px solid transparent;
   font-variant: no-common-ligatures;
   line-height: 1em;
+}
+
+.newline {
+  width: 100%;
+}
+
+.beforeNewline {
+  display: inline-block;
+  height: 1em;
+  margin: 0.25em 0;
+  border-top: 0.05em solid transparent;
+  border-bottom: 2px solid transparent;
+  box-sizing: content-box;
+  vertical-align: top;
+}
+
+.afterNewline {
+  display: inline-block;
 }
 
 .letter {

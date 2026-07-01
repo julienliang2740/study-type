@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { TypingStatus, TypingWord } from "../../types/typing";
 
 type WordDisplayProps = {
@@ -6,6 +7,20 @@ type WordDisplayProps = {
   activeWordIndex: number;
   status: TypingStatus;
   wordsOffsetY: number;
+  registerWord: (index: number, element: HTMLDivElement | null) => void;
+  registerLetter: (
+    wordIndex: number,
+    charIndex: number,
+    element: HTMLSpanElement | null
+  ) => void;
+};
+
+type TypingWordViewProps = {
+  word: TypingWord;
+  wordIndex: number;
+  input: string;
+  isActive: boolean;
+  isTyped: boolean;
   registerWord: (index: number, element: HTMLDivElement | null) => void;
   registerLetter: (
     wordIndex: number,
@@ -43,7 +58,83 @@ function getVisibleCharacter(
   return targetChar ?? "";
 }
 
-export function WordDisplay({
+const TypingWordView = memo(function TypingWordView({
+  word,
+  wordIndex,
+  input,
+  isActive,
+  isTyped,
+  registerWord,
+  registerLetter
+}: TypingWordViewProps): React.JSX.Element {
+  const hasError =
+    getWordHasError(input, word.text) ||
+    (isTyped && input !== "" && input !== word.text);
+  const extraInput = input.slice(word.text.length);
+
+  return (
+    <div
+      className={[
+        "word",
+        isActive ? "active" : "",
+        isTyped ? "typed" : "",
+        hasError ? "error" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-wordindex={wordIndex}
+      ref={(element) => {
+        registerWord(wordIndex, element);
+      }}
+    >
+      {word.displayTokens.map((token, tokenIndex) => {
+        if (token.kind === "faint") {
+          return (
+            <span className="letter faint" key={`faint-${tokenIndex}`}>
+              {token.char}
+            </span>
+          );
+        }
+
+        const charIndex = token.inputOffset;
+        const inputChar = input[charIndex];
+        const targetChar = word.text[charIndex];
+        const className = getLetterClass(inputChar, targetChar);
+        const visibleCharacter = getVisibleCharacter(inputChar, targetChar);
+
+        return (
+          <span
+            className={["letter", className].filter(Boolean).join(" ")}
+            key={`required-${charIndex}`}
+            ref={(element) => {
+              registerLetter(wordIndex, charIndex, element);
+            }}
+          >
+            {visibleCharacter}
+          </span>
+        );
+      })}
+
+      {Array.from(extraInput, (inputChar, extraIndex) => {
+        const charIndex = word.text.length + extraIndex;
+
+        return (
+          <span
+            className="letter incorrect extra"
+            key={`extra-${charIndex}`}
+            ref={(element) => {
+              registerLetter(wordIndex, charIndex, element);
+            }}
+          >
+            {inputChar === " " ? "_" : inputChar}
+          </span>
+        );
+      })}
+    </div>
+  );
+});
+
+export const WordDisplay = memo(function WordDisplay({
   words,
   inputs,
   activeWordIndex,
@@ -64,79 +155,20 @@ export function WordDisplay({
         const isActive =
           status !== "finished" && wordIndex === activeWordIndex;
         const isTyped = status === "finished" || wordIndex < activeWordIndex;
-        const hasError =
-          getWordHasError(input, word.text) ||
-          (isTyped && input !== "" && input !== word.text);
-        const extraInput = input.slice(word.text.length);
 
         return (
-          <div
-            className={[
-              "word",
-              isActive ? "active" : "",
-              isTyped ? "typed" : "",
-              hasError ? "error" : ""
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            data-wordindex={wordIndex}
+          <TypingWordView
+            input={input}
+            isActive={isActive}
+            isTyped={isTyped}
             key={`${word.text}-${wordIndex}`}
-            ref={(element) => {
-              registerWord(wordIndex, element);
-            }}
-          >
-            {word.displayTokens.map((token, tokenIndex) => {
-              if (token.kind === "faint") {
-                return (
-                  <span
-                    className="letter faint"
-                    key={`faint-${tokenIndex}`}
-                  >
-                    {token.char}
-                  </span>
-                );
-              }
-
-              const charIndex = token.inputOffset;
-              const inputChar = input[charIndex];
-              const targetChar = word.text[charIndex];
-              const className = getLetterClass(inputChar, targetChar);
-              const visibleCharacter = getVisibleCharacter(
-                inputChar,
-                targetChar
-              );
-
-              return (
-                <span
-                  className={["letter", className].filter(Boolean).join(" ")}
-                  key={`required-${charIndex}`}
-                  ref={(element) => {
-                    registerLetter(wordIndex, charIndex, element);
-                  }}
-                >
-                  {visibleCharacter}
-                </span>
-              );
-            })}
-
-            {Array.from(extraInput, (inputChar, extraIndex) => {
-              const charIndex = word.text.length + extraIndex;
-
-              return (
-                <span
-                  className="letter incorrect extra"
-                  key={`extra-${charIndex}`}
-                  ref={(element) => {
-                    registerLetter(wordIndex, charIndex, element);
-                  }}
-                >
-                  {inputChar === " " ? "_" : inputChar}
-                </span>
-              );
-            })}
-          </div>
+            registerLetter={registerLetter}
+            registerWord={registerWord}
+            word={word}
+            wordIndex={wordIndex}
+          />
         );
       })}
     </div>
   );
-}
+});

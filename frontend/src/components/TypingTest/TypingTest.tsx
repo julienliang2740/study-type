@@ -1,32 +1,14 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Passage } from "../../types/passage";
 import type { TypingState } from "../../types/typing";
-import {
-  createInitialTypingState,
-  deleteTypingData,
-  insertTypingData
-} from "../../lib/typing/engine";
+import { DomTypingController } from "../../lib/typing-dom/domTypingController";
+import { createInitialTypingState } from "../../lib/typing/engine";
 import { buildTypingResult, getElapsedSeconds } from "../../lib/typing/metrics";
 import { RestartIcon } from "./icons";
 import { ResultScreen } from "./ResultScreen";
-import { WordDisplay } from "./WordDisplay";
 
 type TypingTestProps = {
   passages: Passage[];
-};
-
-type CaretPosition = {
-  left: number;
-  top: number;
-  height: number;
-  visible: boolean;
 };
 
 function formatElapsed(seconds: number): string {
@@ -58,56 +40,103 @@ function getCompletionPercent(state: TypingState): number {
 
 export function TypingTest({ passages }: TypingTestProps): React.JSX.Element {
   const [passageIndex, setPassageIndex] = useState(0);
+  const [sessionVersion, setSessionVersion] = useState(0);
   const passage = passages[passageIndex] as Passage;
-  const [state, setState] = useState<TypingState>(() =>
+  const [liveState, setLiveState] = useState<TypingState>(() =>
     createInitialTypingState(passage)
   );
+  const [finishedState, setFinishedState] = useState<TypingState | null>(null);
   const [now, setNow] = useState(() => performance.now());
-  const [caret, setCaret] = useState<CaretPosition>({
-    left: 0,
-    top: 0,
-    height: 0,
-    visible: true
-  });
-  const [wordsOffsetY, setWordsOffsetY] = useState(0);
 
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const wordsWrapperRef = useRef<HTMLDivElement | null>(null);
-  const wordRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const letterRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const wordsRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const caretRef = useRef<HTMLDivElement | null>(null);
+  const controllerRef = useRef<DomTypingController | null>(null);
 
-  const result = useMemo(() => buildTypingResult(state, now), [state, now]);
-  const elapsedSeconds = getElapsedSeconds(state, now);
-  const completionPercent = getCompletionPercent(state);
-
-  const focusInput = useCallback(() => {
-    textareaRef.current?.focus({ preventScroll: true });
-  }, []);
+  const displayState = finishedState ?? liveState;
+  const result = useMemo(
+    () => buildTypingResult(displayState, now),
+    [displayState, now]
+  );
+  const elapsedSeconds = getElapsedSeconds(displayState, now);
+  const completionPercent = getCompletionPercent(displayState);
 
   const restart = useCallback(() => {
-    const nextIndex = (passageIndex + 1) % passages.length;
-    const nextPassage = passages[nextIndex] as Passage;
-    setPassageIndex(nextIndex);
-    setState(createInitialTypingState(nextPassage));
+    controllerRef.current?.destroy();
+    controllerRef.current = null;
+    setFinishedState(null);
+    setPassageIndex((current) =>
+      passages.length === 0 ? 0 : (current + 1) % passages.length
+    );
+    setSessionVersion((current) => current + 1);
+  }, [passages.length]);
+
+  const handleStateChange = useCallback(
+    (state: TypingState, timestamp: number) => {
+      setLiveState(state);
+      setNow(timestamp);
+    },
+    []
+  );
+
+  const handleFinish = useCallback(
+    (state: TypingState, timestamp: number) => {
+      controllerRef.current?.destroy();
+      controllerRef.current = null;
+      setLiveState(state);
+      setFinishedState(state);
+      setNow(timestamp);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const wrapperElement = wrapperRef.current;
+    const wordsElement = wordsRef.current;
+    const inputElement = inputRef.current;
+    const caretElement = caretRef.current;
+    const initialState = createInitialTypingState(passage);
+
+    setLiveState(initialState);
+    setFinishedState(null);
     setNow(performance.now());
-    setWordsOffsetY(0);
-    setCaret((current) => ({ ...current, visible: true }));
-    if (wordsWrapperRef.current !== null) {
-      wordsWrapperRef.current.scrollTop = 0;
+
+    if (
+      wrapperElement === null ||
+      wordsElement === null ||
+      inputElement === null ||
+      caretElement === null
+    ) {
+      return;
     }
-    requestAnimationFrame(focusInput);
-  }, [focusInput, passageIndex, passages]);
+
+    const controller = new DomTypingController({
+      passage,
+      elements: {
+        wrapperElement,
+        wordsElement,
+        inputElement,
+        caretElement
+      },
+      onStateChange: handleStateChange,
+      onFinish: handleFinish,
+      onRestartShortcut: restart
+    });
+
+    controllerRef.current = controller;
+    controller.mount();
+
+    return () => {
+      controller.destroy();
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+      }
+    };
+  }, [handleFinish, handleStateChange, passage, restart, sessionVersion]);
 
   useEffect(() => {
-    setState(createInitialTypingState(passage));
-  }, [passage]);
-
-  useEffect(() => {
-    focusInput();
-  }, [focusInput]);
-
-  useEffect(() => {
-    if (state.status !== "running") return;
+    if (displayState.status !== "running") return;
 
     const interval = window.setInterval(() => {
       setNow(performance.now());
@@ -116,138 +145,9 @@ export function TypingTest({ passages }: TypingTestProps): React.JSX.Element {
     return () => {
       window.clearInterval(interval);
     };
-  }, [state.status]);
+  }, [displayState.status]);
 
-  useLayoutEffect(() => {
-    if (state.status === "finished") {
-      setCaret((current) => ({ ...current, visible: false }));
-      return;
-    }
-
-    const wrapper = wordsWrapperRef.current;
-    const activeWord = wordRefs.current[state.activeWordIndex];
-    if (wrapper === null || activeWord === undefined || activeWord === null) {
-      return;
-    }
-
-    const activeWordTop = Math.round(activeWord.offsetTop);
-    const lineTops = Array.from(
-      new Set(
-        Object.values(wordRefs.current)
-          .filter(
-            (element): element is HTMLDivElement =>
-              element !== null && element.isConnected
-          )
-          .map((element) => Math.round(element.offsetTop))
-      )
-    ).sort((a, b) => a - b);
-    const activeLineIndex = Math.max(0, lineTops.indexOf(activeWordTop));
-    const targetLineTop = lineTops[Math.min(1, activeLineIndex)] ?? 0;
-    const nextWordsOffsetY =
-      activeLineIndex <= 1 ? 0 : targetLineTop - activeWordTop;
-    setWordsOffsetY((current) =>
-      Math.abs(current - nextWordsOffsetY) < 0.5 ? current : nextWordsOffsetY
-    );
-
-    const animationFrame = requestAnimationFrame(() => {
-      const inputLength = state.inputs[state.activeWordIndex]?.length ?? 0;
-      const nextLetter =
-        letterRefs.current[`${state.activeWordIndex}:${inputLength}`];
-      const previousLetter =
-        inputLength > 0
-          ? letterRefs.current[`${state.activeWordIndex}:${inputLength - 1}`]
-          : null;
-
-      const left =
-        nextLetter !== undefined && nextLetter !== null
-          ? activeWord.offsetLeft + nextLetter.offsetLeft
-          : previousLetter !== undefined && previousLetter !== null
-            ? activeWord.offsetLeft +
-              previousLetter.offsetLeft +
-              previousLetter.offsetWidth
-            : activeWord.offsetLeft;
-      const top =
-        nextLetter !== undefined && nextLetter !== null
-          ? activeWord.offsetTop + nextLetter.offsetTop + nextWordsOffsetY
-          : previousLetter !== undefined && previousLetter !== null
-            ? activeWord.offsetTop +
-              previousLetter.offsetTop +
-              nextWordsOffsetY
-            : activeWord.offsetTop + nextWordsOffsetY;
-      const height =
-        nextLetter?.offsetHeight ??
-        previousLetter?.offsetHeight ??
-        activeWord.offsetHeight;
-
-      setCaret({
-        left,
-        top,
-        height,
-        visible: true
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(animationFrame);
-    };
-  }, [state]);
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Tab" || event.key === "Escape") {
-      event.preventDefault();
-      restart();
-      return;
-    }
-
-    if (event.key === "Backspace") {
-      event.preventDefault();
-      setState((current) =>
-        deleteTypingData(current, event.ctrlKey || event.metaKey)
-      );
-      return;
-    }
-
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const timestamp = performance.now();
-      setNow(timestamp);
-      setState((current) => insertTypingData(current, "\n", timestamp));
-      return;
-    }
-
-    if (event.key.length === 1) {
-      event.preventDefault();
-      const timestamp = performance.now();
-      setNow(timestamp);
-      setState((current) => insertTypingData(current, event.key, timestamp));
-    }
-  };
-
-  const handleTextareaChange = (
-    event: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
-    event.currentTarget.value = "";
-  };
-
-  const registerWord = useCallback(
-    (index: number, element: HTMLDivElement | null) => {
-      wordRefs.current[index] = element;
-    },
-    []
-  );
-
-  const registerLetter = useCallback(
-    (wordIndex: number, charIndex: number, element: HTMLSpanElement | null) => {
-      letterRefs.current[`${wordIndex}:${charIndex}`] = element;
-    },
-    []
-  );
-
-  if (state.status === "finished") {
+  if (finishedState !== null) {
     return (
       <ResultScreen passage={passage} result={result} onRestart={restart} />
     );
@@ -265,8 +165,7 @@ export function TypingTest({ passages }: TypingTestProps): React.JSX.Element {
         <div
           id="wordsWrapper"
           className="content-grid full-width"
-          onClick={focusInput}
-          ref={wordsWrapperRef}
+          ref={wrapperRef}
           translate="no"
         >
           <textarea
@@ -282,29 +181,16 @@ export function TypingTest({ passages }: TypingTestProps): React.JSX.Element {
             data-gramm="false"
             data-gramm_editor="false"
             data-lpignore="true"
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            ref={textareaRef}
+            defaultValue=" "
+            ref={inputRef}
             spellCheck={false}
           />
+          <div id="caret" className="full-width default" ref={caretRef} />
           <div
-            id="caret"
-            className={["full-width", "default", caret.visible ? "" : "hidden"]
-              .filter(Boolean)
-              .join(" ")}
-            style={{
-              height: `${caret.height}px`,
-              transform: `translate(${caret.left}px, ${caret.top}px)`
-            }}
-          />
-          <WordDisplay
-            activeWordIndex={state.activeWordIndex}
-            inputs={state.inputs}
-            registerLetter={registerLetter}
-            registerWord={registerWord}
-            status={state.status}
-            words={state.words}
-            wordsOffsetY={wordsOffsetY}
+            id="words"
+            className="full-width"
+            aria-hidden="true"
+            ref={wordsRef}
           />
         </div>
 

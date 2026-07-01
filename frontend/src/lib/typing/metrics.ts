@@ -92,7 +92,12 @@ export function buildTypingResult(
     missed: 0
   };
 
-  for (let i = 0; i < state.words.length; i += 1) {
+  const lastScoredWordIndex =
+    state.status === "finished"
+      ? state.words.length - 1
+      : state.activeWordIndex;
+
+  for (let i = 0; i <= lastScoredWordIndex; i += 1) {
     const word = state.words[i];
     if (word === undefined) continue;
 
