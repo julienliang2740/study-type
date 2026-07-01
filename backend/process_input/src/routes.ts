@@ -1,14 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { processPdfInput } from "./processPdf.js";
 import { processTextInput } from "./processText.js";
 import { processTxtInput } from "./processTxt.js";
 import {
+  MAX_PDF_BYTES,
   MAX_TEXT_BYTES,
   ProcessInputError,
   PROCESS_INPUT_VERSION
 } from "./types.js";
 import type { ProcessInputErrorResponse } from "./types.js";
 
-const MAX_JSON_BODY_BYTES = MAX_TEXT_BYTES + 64 * 1024;
+const MAX_JSON_BODY_BYTES = Math.ceil((MAX_PDF_BYTES * 4) / 3) + 64 * 1024;
 
 function writeJson(
   response: ServerResponse,
@@ -112,9 +114,16 @@ export async function handleRequest(
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/process/pdf") {
+      const body = await readJsonBody(request);
+      writeJson(response, 200, await processPdfInput(body as object));
+      return;
+    }
+
     if (
       url.pathname === "/process/text" ||
       url.pathname === "/process/txt" ||
+      url.pathname === "/process/pdf" ||
       url.pathname === "/health"
     ) {
       throw new ProcessInputError(

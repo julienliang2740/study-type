@@ -21,8 +21,11 @@ import type {
 type BuildDocumentInput = {
   title?: string;
   text: string;
+  originalTextOverride?: string;
   sourceType: ProcessedInputSourceType;
   source?: Omit<ProcessedInputSource, "sizeBytes" | "sha256">;
+  originalSourceBytes?: Buffer;
+  pageCount?: number;
   defaultTitle: string;
   createdAt?: Date;
 };
@@ -54,21 +57,25 @@ export function assertProcessableText(text: unknown): asserts text is string {
 export function buildProcessedDocument({
   title,
   text,
+  originalTextOverride,
   sourceType,
   source,
+  originalSourceBytes,
+  pageCount,
   defaultTitle,
   createdAt = new Date()
 }: BuildDocumentInput): ProcessedInputDocument {
   assertProcessableText(text);
 
   const documentTitle = normalizeTitle(title, defaultTitle);
-  const originalText = text;
-  const canonicalText = canonicalizeText(originalText);
+  const originalText = originalTextOverride ?? text;
+  const canonicalText = canonicalizeText(text);
   const blocks = splitTextBlocks(canonicalText);
+  const sourceBytes = originalSourceBytes ?? Buffer.from(originalText, "utf8");
   const sourceWithHash: ProcessedInputSource = {
     ...source,
-    sizeBytes: Buffer.byteLength(originalText, "utf8"),
-    sha256: sha256Hex(originalText)
+    sizeBytes: sourceBytes.byteLength,
+    sha256: sha256Hex(sourceBytes)
   };
 
   return {
@@ -84,6 +91,7 @@ export function buildProcessedDocument({
       characterCount: countCharacters(canonicalText),
       wordCount: countWords(canonicalText),
       paragraphCount: blocks.length,
+      ...(pageCount === undefined ? {} : { pageCount }),
       createdAt: createdAt.toISOString()
     }
   };

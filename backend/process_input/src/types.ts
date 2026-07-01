@@ -1,8 +1,9 @@
 export const PROCESS_INPUT_VERSION = "process_input.v1" as const;
 export const MAX_TEXT_BYTES = 10 * 1024 * 1024;
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
 export type ProcessedInputVersion = typeof PROCESS_INPUT_VERSION;
-export type ProcessedInputSourceType = "paste" | "txt";
+export type ProcessedInputSourceType = "paste" | "txt" | "pdf";
 export type ProcessedTextBlockType = "paragraph" | "heading" | "unknown";
 
 export type ProcessedInputSource = {
@@ -32,6 +33,7 @@ export type ProcessedInputDocument = {
     characterCount: number;
     wordCount: number;
     paragraphCount: number;
+    pageCount?: number;
     createdAt: string;
   };
 };
@@ -48,12 +50,22 @@ export type ProcessTxtRequest = {
   text: string;
 };
 
+export type ProcessPdfRequest = {
+  title?: string;
+  fileName: string;
+  mimeType?: string;
+  dataBase64: string;
+};
+
 export type ProcessInputErrorCode =
   | "invalid_json"
   | "invalid_request"
   | "invalid_text"
   | "invalid_file_type"
+  | "invalid_pdf"
   | "unsupported_mime_type"
+  | "no_extractable_text"
+  | "pdf_extraction_failed"
   | "payload_too_large"
   | "not_found"
   | "method_not_allowed";

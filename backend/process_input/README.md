@@ -1,6 +1,6 @@
 # backend/process_input
 
-Local Node-style TypeScript service for turning pasted text or `.txt` content into canonical processed JSON.
+Local Node-style TypeScript service for turning pasted text, `.txt` content, or text-based PDF files into canonical processed JSON.
 
 This module does not apply typing normalization options. Lowercasing, punctuation handling, faded punctuation, and number-to-word conversion belong in `backend/normalization`.
 
@@ -24,6 +24,7 @@ The service listens on `http://127.0.0.1:8788` by default. Override with `PORT` 
 GET  /health
 POST /process/text
 POST /process/txt
+POST /process/pdf
 ```
 
 ## Example: Health
@@ -71,6 +72,26 @@ curl -X POST http://127.0.0.1:8788/process/text \
   --data-raw '{"title":"Paste Test","text":"First paragraph.\n\nSecond paragraph."}'
 ```
 
+## Example: PDF Content
+
+PDF input uses JSON with base64 content for local development. Multipart upload can be added later.
+
+```powershell
+$pdfBytes = [IO.File]::ReadAllBytes("fixtures/sample-text.pdf")
+$body = ConvertTo-Json -InputObject @{
+  title = "PDF Test"
+  fileName = "sample-text.pdf"
+  mimeType = "application/pdf"
+  dataBase64 = [Convert]::ToBase64String($pdfBytes)
+} -Compress
+
+Invoke-WebRequest -UseBasicParsing `
+  -Method Post `
+  -Uri "http://127.0.0.1:8788/process/pdf" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
 ## Output Shape
 
 ```ts
@@ -78,7 +99,7 @@ type ProcessedInputDocument = {
   id: string;
   version: "process_input.v1";
   title: string;
-  sourceType: "paste" | "txt";
+  sourceType: "paste" | "txt" | "pdf";
   source: {
     fileName?: string;
     mimeType?: string;
@@ -92,6 +113,7 @@ type ProcessedInputDocument = {
     characterCount: number;
     wordCount: number;
     paragraphCount: number;
+    pageCount?: number;
     createdAt: string;
   };
 };
@@ -99,6 +121,15 @@ type ProcessedInputDocument = {
 
 ## Processing Scope
 
-The service preserves the original text, creates a canonical text version with basic ingestion cleanup, splits paragraph-like blocks, and returns metadata. It intentionally does not store files or documents yet.
+The service preserves the original text for pasted text and `.txt` input. For PDFs, `originalText` is the raw extracted text, while `canonicalText` is produced after basic PDF extraction cleanup plus the shared ingestion cleanup.
+
+PDF cleanup is intentionally simple: repeated whitespace, repeated blank lines, common hyphenated line breaks, and awkward wrapped lines are cleaned. It does not reconstruct textbook layout.
+
+## Known PDF Limitations
+
+- Text-based PDFs are supported.
+- Scanned/image-only PDFs are not supported because this step does not add OCR.
+- Complex layouts, tables, sidebars, footnotes, and multi-column text may extract in imperfect order.
+- Original PDF storage is not implemented yet.
 
 `src/storage.ts` is a no-op boundary for future R2 persistence.
