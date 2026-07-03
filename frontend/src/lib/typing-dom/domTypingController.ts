@@ -258,21 +258,21 @@ export class DomTypingController {
 
   private syncAfterRender(animateCaret: boolean): void {
     window.requestAnimationFrame(() => {
-      this.keepActiveRowVisible();
-      this.caretController.update(this.state, animateCaret);
+      const rowShifted = this.keepActiveRowVisible();
+      this.caretController.update(this.state, animateCaret && !rowShifted);
     });
   }
 
-  private keepActiveRowVisible(): void {
-    if (this.state.words.length === 0) return;
+  private keepActiveRowVisible(): boolean {
+    if (this.state.words.length === 0) return false;
 
     const activeWord = this.options.words.querySelector<HTMLElement>(
       `.word[data-word-index="${this.state.activeWordIndex}"]`
     );
-    if (activeWord === null) return;
+    if (activeWord === null) return false;
 
     const rowTops = this.getRowTops();
-    if (rowTops.length === 0) return;
+    if (rowTops.length === 0) return false;
 
     this.syncWrapperHeight(rowTops);
 
@@ -281,10 +281,11 @@ export class DomTypingController {
     const firstRowTop = rowTops[0] ?? 0;
     const nextTranslateY = Math.max(0, (rowTops[topRowIndex] ?? 0) - firstRowTop);
 
-    if (Math.abs(nextTranslateY - this.currentTranslateY) < 1) return;
+    if (Math.abs(nextTranslateY - this.currentTranslateY) < 1) return false;
 
     this.currentTranslateY = nextTranslateY;
     this.options.words.style.transform = `translate3d(0, -${nextTranslateY}px, 0)`;
+    return true;
   }
 
   private getRowTops(): number[] {
@@ -327,6 +328,13 @@ export class DomTypingController {
 
     if (rowStep <= 0) return;
 
-    this.options.wrapper.style.height = `${Math.ceil(rowStep * 3)}px`;
+    const wrapperStyle = window.getComputedStyle(this.options.wrapper);
+    const verticalChrome =
+      Number.parseFloat(wrapperStyle.paddingTop) +
+      Number.parseFloat(wrapperStyle.paddingBottom) +
+      Number.parseFloat(wrapperStyle.borderTopWidth) +
+      Number.parseFloat(wrapperStyle.borderBottomWidth);
+
+    this.options.wrapper.style.height = `${rowStep * 3 + verticalChrome}px`;
   }
 }

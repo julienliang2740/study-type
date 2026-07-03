@@ -1,4 +1,4 @@
-import type { TypingResult, TypingState } from "../../lib/typing/types";
+﻿import type { TypingResult, TypingState } from "../../lib/typing/types";
 
 type ResultScreenProps = {
   state: TypingState;
@@ -59,21 +59,22 @@ export function ResultScreen({
       <div className="result-actions">
         <button
           type="button"
-          className="icon-button"
-          aria-label="Next test"
+          className="text-button"
+          aria-label="next test"
           onClick={onNext}
         >
-          →
+          next
         </button>
         <button
           type="button"
-          className="icon-button"
-          aria-label="Repeat test"
+          className="text-button"
+          aria-label="repeat test"
           onClick={onRestart}
         >
-          ↻
+          repeat
         </button>
       </div>
     </section>
   );
 }
+

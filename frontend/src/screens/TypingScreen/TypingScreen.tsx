@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { buildTypingResult } from "../../lib/typing/metrics";
 import type { TypingResult, TypingState } from "../../lib/typing/types";
 import { createInitialTypingState } from "../../lib/typing/engine";
@@ -186,14 +186,13 @@ export function TypingScreen({ passages }: TypingScreenProps): React.JSX.Element
         </div>
         <button
           type="button"
-          className="icon-button restart-button"
-          aria-label="Restart Test"
+          className="text-button restart-button"
+          aria-label="restart test"
           onClick={() => {
             restart(true);
           }}
         >
-          <span aria-hidden="true">{"\u21bb"}</span>
-          <span className="restart-tooltip" role="tooltip">Restart Test</span>
+          restart
         </button>
         <div className="restart-shortcut" aria-hidden="true">
           <kbd>tab</kbd>
@@ -205,3 +204,4 @@ export function TypingScreen({ passages }: TypingScreenProps): React.JSX.Element
     </section>
   );
 }
+

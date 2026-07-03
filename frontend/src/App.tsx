@@ -32,7 +32,7 @@ export default function App(): React.JSX.Element {
           onClick={showSamples}
           aria-label="Start built-in samples"
         >
-          type-study
+          studytype
         </button>
         <nav className="topbar-nav" aria-label="Mode">
           <button
