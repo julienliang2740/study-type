@@ -187,13 +187,20 @@ export function TypingScreen({ passages }: TypingScreenProps): React.JSX.Element
         <button
           type="button"
           className="icon-button restart-button"
-          aria-label="Restart test"
+          aria-label="Restart Test"
           onClick={() => {
             restart(true);
           }}
         >
-          ↻
+          <span aria-hidden="true">{"\u21bb"}</span>
+          <span className="restart-tooltip" role="tooltip">Restart Test</span>
         </button>
+        <div className="restart-shortcut" aria-hidden="true">
+          <kbd>tab</kbd>
+          <span>&gt;</span>
+          <kbd>enter</kbd>
+          <span>- restart test</span>
+        </div>
       </div>
     </section>
   );

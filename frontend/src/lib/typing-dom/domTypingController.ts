@@ -36,7 +36,6 @@ export class DomTypingController {
   private state: TypingState;
   private readonly caretController: CaretController;
   private currentTranslateY = 0;
-  private tabRestartArmed = false;
   private resizeObserver: ResizeObserver | null = null;
 
   constructor(private readonly options: DomTypingControllerOptions) {
@@ -170,8 +169,6 @@ export class DomTypingController {
       return;
     }
 
-    this.tabRestartArmed = false;
-
     for (const char of Array.from(data)) {
       this.applyChange(insertTypingData(this.state, char, performance.now()));
     }
@@ -181,27 +178,17 @@ export class DomTypingController {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Tab") {
-      event.preventDefault();
-      this.tabRestartArmed = true;
-      return;
-    }
-
-    if (event.key === "Enter" && this.tabRestartArmed) {
-      event.preventDefault();
-      this.tabRestartArmed = false;
-      this.options.onRestartShortcut();
+      this.restoreInputValue();
       return;
     }
 
     if (event.key === "Escape") {
       event.preventDefault();
-      this.tabRestartArmed = false;
       this.options.onRestartShortcut();
       return;
     }
 
     if (event.key === "Backspace") {
-      this.tabRestartArmed = false;
       event.preventDefault();
       this.applyChange(
         deleteTypingData(this.state, event.ctrlKey || event.metaKey, performance.now())
@@ -211,7 +198,6 @@ export class DomTypingController {
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
-      this.tabRestartArmed = false;
       event.preventDefault();
     }
   };
@@ -228,6 +214,7 @@ export class DomTypingController {
     const isEditable =
       target?.tagName === "INPUT" ||
       target?.tagName === "TEXTAREA" ||
+      target?.tagName === "BUTTON" ||
       target?.isContentEditable === true;
 
     if (isEditable) return;
@@ -282,24 +269,64 @@ export class DomTypingController {
     const activeWord = this.options.words.querySelector<HTMLElement>(
       `.word[data-word-index="${this.state.activeWordIndex}"]`
     );
-    const firstWord = this.options.words.querySelector<HTMLElement>(".word");
-    if (activeWord === null || firstWord === null) return;
+    if (activeWord === null) return;
 
-    const lineHeight = Math.max(firstWord.offsetHeight, 1);
-    const activeTop = activeWord.offsetTop;
-    const visibleTop = this.currentTranslateY;
-    const visibleBottom = visibleTop + this.options.wrapper.clientHeight;
-    let nextTranslateY = this.currentTranslateY;
+    const rowTops = this.getRowTops();
+    if (rowTops.length === 0) return;
 
-    if (activeTop + lineHeight > visibleBottom - lineHeight * 0.6) {
-      nextTranslateY = Math.max(0, activeTop - lineHeight * 0.6);
-    } else if (activeTop < visibleTop + lineHeight * 0.25) {
-      nextTranslateY = Math.max(0, activeTop - lineHeight * 0.25);
-    }
+    this.syncWrapperHeight(rowTops);
+
+    const activeRowIndex = this.getRowIndex(rowTops, activeWord.offsetTop);
+    const topRowIndex = Math.max(0, activeRowIndex - 1);
+    const firstRowTop = rowTops[0] ?? 0;
+    const nextTranslateY = Math.max(0, (rowTops[topRowIndex] ?? 0) - firstRowTop);
 
     if (Math.abs(nextTranslateY - this.currentTranslateY) < 1) return;
 
     this.currentTranslateY = nextTranslateY;
     this.options.words.style.transform = `translate3d(0, -${nextTranslateY}px, 0)`;
+  }
+
+  private getRowTops(): number[] {
+    const rowTops: number[] = [];
+    const words = Array.from(
+      this.options.words.querySelectorAll<HTMLElement>(".word")
+    );
+
+    for (const word of words) {
+      if (!rowTops.some((top) => Math.abs(top - word.offsetTop) < 1)) {
+        rowTops.push(word.offsetTop);
+      }
+    }
+
+    return rowTops.sort((a, b) => a - b);
+  }
+
+  private getRowIndex(rowTops: number[], offsetTop: number): number {
+    let closestIndex = 0;
+
+    for (let index = 0; index < rowTops.length; index += 1) {
+      if (Math.abs(rowTops[index] - offsetTop) < 1) {
+        return index;
+      }
+
+      if (rowTops[index] <= offsetTop) {
+        closestIndex = index;
+      }
+    }
+
+    return closestIndex;
+  }
+
+  private syncWrapperHeight(rowTops: number[]): void {
+    const firstWord = this.options.words.querySelector<HTMLElement>(".word");
+    const rowStep =
+      rowTops.length > 1
+        ? rowTops[1] - rowTops[0]
+        : firstWord?.offsetHeight ?? this.options.wrapper.clientHeight / 3;
+
+    if (rowStep <= 0) return;
+
+    this.options.wrapper.style.height = `${Math.ceil(rowStep * 3)}px`;
   }
 }
